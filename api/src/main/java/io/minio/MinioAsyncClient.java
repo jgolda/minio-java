@@ -84,6 +84,7 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import okhttp3.HttpUrl;
 import okhttp3.MultipartBody;
@@ -149,7 +150,8 @@ public class MinioAsyncClient extends S3Base {
       String region,
       Provider provider,
       OkHttpClient httpClient,
-      boolean closeHttpClient) {
+      boolean closeHttpClient,
+      ExecutorService executor) {
     super(
         baseUrl,
         awsS3Prefix,
@@ -159,7 +161,8 @@ public class MinioAsyncClient extends S3Base {
         region,
         provider,
         httpClient,
-        closeHttpClient);
+        closeHttpClient,
+        executor);
   }
 
   protected MinioAsyncClient(MinioAsyncClient client) {
@@ -461,8 +464,7 @@ public class MinioAsyncClient extends S3Base {
     checkArgs(args);
     args.validateSse(this.baseUrl);
 
-    return CompletableFuture.supplyAsync(
-            () -> args.source().offset() != null && args.source().length() != null)
+    return supplyAsync(() -> args.source().offset() != null && args.source().length() != null)
         .thenCompose(
             condition -> {
               if (condition) {
@@ -672,7 +674,7 @@ public class MinioAsyncClient extends S3Base {
               }
 
               CompletableFuture<ObjectWriteResponse> completableFuture =
-                  CompletableFuture.supplyAsync(
+                  supplyAsync(
                           () -> {
                             Multimap<String, String> headers = newMultimap(args.extraHeaders());
                             headers.putAll(args.genHeaders());
@@ -712,7 +714,7 @@ public class MinioAsyncClient extends S3Base {
 
                             int partNumber = 0;
                             CompletableFuture<Part[]> future =
-                                CompletableFuture.supplyAsync(
+                                supplyAsync(
                                     () -> {
                                       return new Part[partCount[0]];
                                     });
@@ -3430,7 +3432,7 @@ public class MinioAsyncClient extends S3Base {
           NoSuchAlgorithmException, XmlParserException {
     checkArgs(args);
 
-    return CompletableFuture.supplyAsync(
+    return supplyAsync(
             () -> {
               FileOutputStream fos = null;
               BufferedOutputStream bos = null;
@@ -3580,7 +3582,7 @@ public class MinioAsyncClient extends S3Base {
     checkArgs(args);
     args.validateSse(this.baseUrl);
 
-    return CompletableFuture.supplyAsync(
+    return supplyAsync(
             () -> {
               // Build POST object data
               String objectName =
@@ -3722,6 +3724,8 @@ public class MinioAsyncClient extends S3Base {
     private OkHttpClient httpClient;
     private boolean closeHttpClient;
 
+    private ExecutorService executor;
+
     private void setAwsInfo(String host, boolean https) {
       this.awsS3Prefix = null;
       this.awsDomainSuffix = null;
@@ -3834,6 +3838,12 @@ public class MinioAsyncClient extends S3Base {
       return this;
     }
 
+    public Builder executor(ExecutorService executor) {
+      HttpUtils.validateNotNull(executor, "executor");
+      this.executor = executor;
+      return this;
+    }
+
     public MinioAsyncClient build() {
       HttpUtils.validateNotNull(this.baseUrl, "endpoint");
 
@@ -3849,7 +3859,10 @@ public class MinioAsyncClient extends S3Base {
         this.closeHttpClient = true;
         this.httpClient =
             HttpUtils.newDefaultHttpClient(
-                DEFAULT_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT);
+                DEFAULT_CONNECTION_TIMEOUT,
+                DEFAULT_CONNECTION_TIMEOUT,
+                DEFAULT_CONNECTION_TIMEOUT,
+                executor);
       }
 
       return new MinioAsyncClient(
@@ -3861,7 +3874,8 @@ public class MinioAsyncClient extends S3Base {
           region,
           provider,
           httpClient,
-          closeHttpClient);
+          closeHttpClient,
+          executor);
     }
   }
 }

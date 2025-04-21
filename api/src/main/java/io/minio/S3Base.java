@@ -83,11 +83,8 @@ import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -148,6 +145,8 @@ public abstract class S3Base implements AutoCloseable {
   protected OkHttpClient httpClient;
   protected boolean closeHttpClient;
 
+  private ExecutorService executor;
+
   /** @deprecated This method is no longer supported. */
   @Deprecated
   protected S3Base(
@@ -158,7 +157,8 @@ public abstract class S3Base implements AutoCloseable {
       boolean useVirtualStyle,
       String region,
       Provider provider,
-      OkHttpClient httpClient) {
+      OkHttpClient httpClient,
+      ExecutorService executor) {
     this(
         baseUrl,
         awsS3Prefix,
@@ -168,7 +168,8 @@ public abstract class S3Base implements AutoCloseable {
         region,
         provider,
         httpClient,
-        false);
+        false,
+        executor);
   }
 
   protected S3Base(
@@ -180,7 +181,8 @@ public abstract class S3Base implements AutoCloseable {
       String region,
       Provider provider,
       OkHttpClient httpClient,
-      boolean closeHttpClient) {
+      boolean closeHttpClient,
+      ExecutorService executor) {
     this.baseUrl = baseUrl;
     this.awsS3Prefix = awsS3Prefix;
     this.awsDomainSuffix = awsDomainSuffix;
@@ -190,6 +192,7 @@ public abstract class S3Base implements AutoCloseable {
     this.provider = provider;
     this.httpClient = httpClient;
     this.closeHttpClient = closeHttpClient;
+    this.executor = executor;
   }
 
   /** @deprecated This method is no longer supported. */
@@ -231,6 +234,7 @@ public abstract class S3Base implements AutoCloseable {
     this.provider = client.provider;
     this.httpClient = client.httpClient;
     this.closeHttpClient = client.closeHttpClient;
+    this.executor = client.executor;
   }
 
   /** Check whether argument is valid or not. */
@@ -1204,7 +1208,7 @@ public abstract class S3Base implements AutoCloseable {
     long[] objectSize = {0};
     int index = 0;
 
-    CompletableFuture<Integer> completableFuture = CompletableFuture.supplyAsync(() -> 0);
+    CompletableFuture<Integer> completableFuture = supplyAsync(() -> 0);
     for (ComposeSource src : sources) {
       index++;
       final int i = index;
@@ -2887,7 +2891,7 @@ public abstract class S3Base implements AutoCloseable {
       PartSource firstPartSource)
       throws InsufficientDataException, InternalException, InvalidKeyException, IOException,
           NoSuchAlgorithmException, XmlParserException {
-    return CompletableFuture.supplyAsync(
+    return supplyAsync(
         () -> {
           String uploadId = null;
           ObjectWriteResponse response = null;
@@ -2986,7 +2990,7 @@ public abstract class S3Base implements AutoCloseable {
     headers.putAll(args.genHeaders());
     if (!headers.containsKey("Content-Type")) headers.put("Content-Type", contentType);
 
-    return CompletableFuture.supplyAsync(
+    return supplyAsync(
             () -> {
               try {
                 return partReader.getPart();
@@ -3897,6 +3901,14 @@ public abstract class S3Base implements AutoCloseable {
                 response.close();
               }
             });
+  }
+
+  protected <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier) {
+    if (executor != null) {
+      return CompletableFuture.supplyAsync(supplier, executor);
+    } else {
+      return CompletableFuture.supplyAsync(supplier);
+    }
   }
 
   @Override

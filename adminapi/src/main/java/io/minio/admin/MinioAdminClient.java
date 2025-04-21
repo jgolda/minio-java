@@ -54,6 +54,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
@@ -921,6 +922,7 @@ public class MinioAdminClient {
     private String region = "";
     private Provider provider;
     private OkHttpClient httpClient;
+    private ExecutorService executor;
 
     public Builder endpoint(String endpoint) {
       this.baseUrl = HttpUtils.getBaseUrl(endpoint);
@@ -973,13 +975,22 @@ public class MinioAdminClient {
       return this;
     }
 
+    public Builder executor(ExecutorService executor) {
+      HttpUtils.validateNotNull(executor, "executor");
+      this.executor = executor;
+      return this;
+    }
+
     public MinioAdminClient build() {
       HttpUtils.validateNotNull(baseUrl, "base url");
       HttpUtils.validateNotNull(provider, "credential provider");
       if (httpClient == null) {
         httpClient =
             HttpUtils.newDefaultHttpClient(
-                DEFAULT_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT);
+                DEFAULT_CONNECTION_TIMEOUT,
+                DEFAULT_CONNECTION_TIMEOUT,
+                DEFAULT_CONNECTION_TIMEOUT,
+                executor);
       }
       return new MinioAdminClient(baseUrl, region, provider, httpClient);
     }

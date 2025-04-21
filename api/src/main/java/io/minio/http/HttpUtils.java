@@ -30,6 +30,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import javax.net.ssl.HostnameVerifier;
@@ -41,6 +42,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+import okhttp3.Dispatcher;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
@@ -266,14 +268,22 @@ public class HttpUtils {
 
   public static OkHttpClient newDefaultHttpClient(
       long connectTimeout, long writeTimeout, long readTimeout) {
-    OkHttpClient httpClient =
+    return newDefaultHttpClient(connectTimeout, writeTimeout, readTimeout, null);
+  }
+
+  public static OkHttpClient newDefaultHttpClient(
+      long connectTimeout, long writeTimeout, long readTimeout, ExecutorService executor) {
+    OkHttpClient.Builder builder =
         new OkHttpClient()
             .newBuilder()
             .connectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
             .writeTimeout(writeTimeout, TimeUnit.MILLISECONDS)
             .readTimeout(readTimeout, TimeUnit.MILLISECONDS)
-            .protocols(Arrays.asList(Protocol.HTTP_1_1))
-            .build();
+            .protocols(Arrays.asList(Protocol.HTTP_1_1));
+    if (executor != null) {
+      builder.dispatcher(new Dispatcher(executor));
+    }
+    OkHttpClient httpClient = builder.build();
     String filename = System.getenv("SSL_CERT_FILE");
     if (filename != null && !filename.isEmpty()) {
       try {
